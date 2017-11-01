@@ -16,22 +16,6 @@
  * 
  * With two sonar sensors in front, go forward till we detect an obstacle in one or both of them. Turn until obstacle disappears
  * from view.
- * 
- * Servos generally want a PWM signal with a duty cycle of 1-2 milliseconds with those being the travel limits. Period should be 20 ms or 50 Hz.
- * 
- * Sonar sensor interface. Pulse trigger pin high for at least 10 us. Then measure duration of echo pin high pulse
- * and multiply by scaling factor to get mm.
- * Input capture pin (B0 on 328, L1, L0, D4 on 2560) can be used to measure pulse width.
- * TCNT1L 0x84
- * TCNT1H 0x85
- * ICR1L 0x86
- * ICR1H 0x87
- * However, use TCNT1, ICR1, let GCC take care of access. 2 cycle read, 5 cycle atomic read, 4 cycle write, 7 cycle atomic write
- * These include two ldi, less if value to write is already in register
- * Millis, delay, etc. use timer0, servo library uses timer1. Timer 1 PWM are B1, B2 (9, 10)
- * Timers 0 and 2 are 8 bit. Timer 1 is 16 bit.
- * See these: http://www.electronicwings.com/avr-atmega/ultrasonic-module-hc-sr04-interfacing-with-atmega1632
- * http://www.electronicwings.com/avr-atmega/atmega1632-timer-input-capture-mode
  */
 #include "Enes100.h"
 #define MARKER_ID 12
@@ -75,10 +59,10 @@ void loop()
   getLocation();
 }
 
-uint16_t headingToPool(void)
+uint16_t headingToDestination(uint16_t destx, uint16_t desty)
 {
-  int16_t dy = (int16_t)pool.y - (int16_t)robot.y;
-  int16_t dx = (int16_t)pool.x - (int16_t)robot.x;
+  int16_t dy = (int16_t)desty - (int16_t)robot.y;
+  int16_t dx = (int16_t)destx - (int16_t)robot.x;
   if(dx == 0) // Is destination straight up or down?
   {
     return dy > 0 ? ONE_QUARTER : THREE_QUARTER;
@@ -105,6 +89,6 @@ void getLocation() // This function updates the robots's coordinates
   //robot.theta = robot.theta > THREE_QUARTER ? robot.theta - THREE_QUARTER : robot.theta + ONE_QUARTER;
   return;
 }
-
+void moveTo
 
 

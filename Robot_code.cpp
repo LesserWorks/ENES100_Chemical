@@ -28,7 +28,7 @@
 #define HALF_CIRCLE ((uint16_t)(M_PI * 1000.0)) // Pi
 #define ONE_QUARTER ((uint16_t)(M_PI * 500.0)) // Pi over two
 
-#define tol 50 // Tolerance in millimeters 
+#define tol 50 // Tolerance in millimeters (or milliradians)
 #define degToRad(degree) ((degree * M_PI) / 180.0)
 #define radToDeg(radian) ((radian * 180.0) / M_PI)
 #define closeEnough(a,b) (a <= (b + tol) && a >= (b - tol)) // True if a is within (b - tol, b + tol)
@@ -45,6 +45,7 @@ struct coord pool;
 int16_t clearance = 500; // Clearance in mm between robot and obstacle
 
 void getLocation(void);
+uint16_t headingToDestination(uint16_t destx, uint16_t desty);
 
 void setup() 
 {
@@ -103,10 +104,10 @@ void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location wit
       turnTo(heading); // Correct our heading if we have drifted off course
       corrections++;
     }
-    if(corrections > 10) // If we have had to correct this many times, we will probably not hit the target
+    if(corrections > 10) // If we have had to correct this many times, we will probably not hit the destination
     {
-      heading = headingToDestination(destx, desty);
-      corrections = 0;
+      heading = headingToDestination(destx, desty); // Recompute heading
+      corrections = 0; // Reset the number of corrections
     }
     goForward(128, 128);
   }

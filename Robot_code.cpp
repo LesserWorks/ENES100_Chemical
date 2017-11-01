@@ -28,9 +28,10 @@
 #define HALF_CIRCLE ((uint16_t)(M_PI * 1000.0)) // Pi
 #define ONE_QUARTER ((uint16_t)(M_PI * 500.0)) // Pi over two
 
+#define tol 50 // Tolerance in millimeters 
 #define degToRad(degree) ((degree * M_PI) / 180.0)
 #define radToDeg(radian) ((radian * 180.0) / M_PI)
-
+#define closeEnough(a,b) (a <= (b + tol) && a >= (b - tol)) // True if a is within (b - tol, b + tol)
 Enes100 rf("The Swiss Army Bot", CHEMICAL, MARKER_ID, RX_PIN, TX_PIN);
 struct coord // Use this instead of provided coordinate class because theirs uses floats
 {
@@ -89,6 +90,28 @@ void getLocation() // This function updates the robots's coordinates
   //robot.theta = robot.theta > THREE_QUARTER ? robot.theta - THREE_QUARTER : robot.theta + ONE_QUARTER;
   return;
 }
-void moveTo
-
+void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location without accounting for obstacles
+{
+  getLocation();
+  uint16_t heading = headingToDestination(destx, desty);
+  turnTo(heading);
+  goStraight(128);
+  while(!closeEnough(robot.x, destx) || !closeEnough(robot.y, desty))
+  {
+    getLocation();
+    
+  }
+}
+// Moves to destination until an obstacle is encountered. 
+// If an obstacle is encountered, the robot stops and the function returns 0. 
+// If it reaches the destination, the robot stops and the function returns 1.
+uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty) 
+{
+}
+void turnTo(uint16_t heading) // This function turns the robot until it is pointing in the given direction
+{
+}
+void goStraight(uint8_t speed) // This function turns the motors on at the given speed (from 0-255)
+{
+}
 

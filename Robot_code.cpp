@@ -95,12 +95,12 @@ void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location wit
 {
   uint16_t heading = headingToDestination(destx, desty);
   uint8_t corrections = 0;
-  do
+  while(!closeEnough(robot.x, destx) || !closeEnough(robot.y, desty))
   { // Not sure if this is the best way, but it should work.
     getLocation(); // Update our location and heading
     if(!closeEnough(robot.theta, heading)) // Have we drifted off course?
     {
-      goForward(0, 0); // Stop motors
+      motors(0, 0); // Stop motors
       turnTo(heading); // Correct our heading if we have drifted off course
       corrections++;
     }
@@ -109,10 +109,10 @@ void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location wit
       heading = headingToDestination(destx, desty); // Recompute heading
       corrections = 0; // Reset the number of corrections
     }
-    goForward(128, 128);
+    motors(128, 128);
   }
-  while(!closeEnough(robot.x, destx) || !closeEnough(robot.y, desty));
-  goForward(0, 0); // Stop moving
+  
+  motors(0, 0); // Stop moving
   return;
 }
 // Moves to destination until an obstacle is encountered. 
@@ -124,7 +124,7 @@ uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty)
 void turnTo(uint16_t heading) // This function turns the robot until it is pointing in the given direction
 {
 }
-void goForward(uint8_t leftSpeed, uint8_t rightSpeed) // This function turns the motors on at the given speeds (from 0-255)
+void motors(uint8_t leftSpeed, uint8_t rightSpeed) // This function turns the motors on at the given speeds (from 0-255)
 {
 }
 

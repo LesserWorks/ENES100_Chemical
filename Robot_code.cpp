@@ -120,11 +120,25 @@ void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location wit
 // If it reaches the destination, the robot stops and the function returns 1.
 uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty) 
 {
+  unit16_t heading = headingToDestination(destx, desty);
+  moveTo(destx, desty);
+  int16_t obstacleX = analogRead(RX_PIN);
+  getLocation();
+  int16_t xClearance = robot.x- obstacleX;
+  int16_t yClearance = robot.y- (//y-coordinate of obstacle);
 }
 void turnTo(uint16_t heading) // This function turns the robot until it is pointing in the given direction
 {
+  getLocation();
+  int16_t xVal = robot.x;
+  int16_t yVal = robot.y;
+  int16_t dist = sq(xVal) + sq(yVal);
+  int16_t theta = sin(xVal);
+  
+  
 }
 void motors(uint8_t leftSpeed, uint8_t rightSpeed) // This function turns the motors on at the given speeds (from 0-255)
 {
+  
 }
 

@@ -18,6 +18,7 @@
  * from view.
  */
 #include "Enes100.h"
+#include "NewPing.h"
 #define MARKER_ID 12
 #define RX_PIN 8
 #define TX_PIN 9
@@ -25,6 +26,10 @@
 #define LEFT_PWM 5
 #define RIGHT_DIR 6
 #define RIGHT_PWM 7
+#define LEFT_TRIGGER 0
+#define LEFT_ECHO 0
+#define RIGHT_TRIGGER 0
+#define RIGHT_ECHO 0
 int16_t defaultSpeed = 128;
 
 //Definitions for measuring pH
@@ -44,6 +49,9 @@ int buffer[10] //array to hold pH readings
 #define radToDeg(radian) ((radian * 180.0) / M_PI)
 #define closeEnough(a,b) (a <= (b + tol) && a >= (b - tol)) // True if a is within (b - tol, b + tol)
 Enes100 rf("The Swiss Army Bot", CHEMICAL, MARKER_ID, RX_PIN, TX_PIN);
+NewPing rsense(RIGHT_TRIGGER, RIGHT_ECHO, 255);
+NewPing lsense(LEFT_TRIGGER, LEFT_ECHO, 255);
+
 struct coord // Use this instead of provided coordinate class because theirs uses floats
 {
   uint16_t x;
@@ -147,7 +155,13 @@ uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty)
       heading = headingToDestination(destx, desty); // Recompute heading
       corrections = 0; // Reset the number of corrections
     }
-    
+    uint8_t rdist = rsense.ping_cm();
+    uint8_t ldist = lsense.ping_cm();
+    if((rdist || ldist) && (rdist < clearance || ldist < clearance)) // Are either nonzero and if so, within allowable clearance?
+    {
+      motors(0, 0);
+      return 0;
+    }
     motors(128, 128);
   }
   

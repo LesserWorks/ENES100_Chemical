@@ -53,7 +53,7 @@ struct coord // Use this instead of provided coordinate class because theirs use
 
 struct coord robot; // Updated with coordinates whenevey they are received (the current location of robot).
 struct coord pool;
-int16_t clearance = 500; // Clearance in mm between robot and obstacle
+uint8_t clearance = 20; // Clearance in cm between robot and obstacle
 
 void getLocation(void);
 uint16_t headingToDestination(uint16_t destx, uint16_t desty);
@@ -131,12 +131,28 @@ void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location wit
 // If it reaches the destination, the robot stops and the function returns 1.
 uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty) 
 {
-  unit16_t heading = headingToDestination(destx, desty);
-  moveTo(destx, desty);
-  int16_t obstacleX = analogRead(RX_PIN);
-  getLocation();
-  int16_t xClearance = robot.x- obstacleX;
-  int16_t yClearance = robot.y- (//y-coordinate of obstacle);
+  uint16_t heading = headingToDestination(destx, desty);
+  uint8_t corrections = 0;
+  while(!closeEnough(robot.x, destx) || !closeEnough(robot.y, desty))
+  { // Not sure if this is the best way, but it should work.
+    getLocation(); // Update our location and heading
+    if(!closeEnough(robot.theta, heading)) // Have we drifted off course?
+    {
+      motors(0, 0); // Stop motors
+      turnTo(heading); // Correct our heading if we have drifted off course
+      corrections++;
+    }
+    if(corrections > 10) // If we have had to correct this many times, we will probably not hit the destination
+    {
+      heading = headingToDestination(destx, desty); // Recompute heading
+      corrections = 0; // Reset the number of corrections
+    }
+    
+    motors(128, 128);
+  }
+  
+  motors(0, 0); // Stop moving
+  return 1;
 }
 void turnTo(uint16_t heading) // This function turns the robot until it is pointing in the given direction
 {

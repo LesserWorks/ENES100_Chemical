@@ -19,8 +19,12 @@
  */
 #include "Enes100.h"
 #define MARKER_ID 12
-#define RX_PIN 7
-#define TX_PIN 8
+#define RX_PIN 8
+#define TX_PIN 9
+#define LEFT_DIR 4
+#define LEFT_PWM 5
+#define RIGHT_DIR 6
+#define RIGHT_PWM 7
 
 // These macros give values in milliradians
 #define FULL_CIRCLE ((uint16_t)(M_PI * 2000.0)) // Two pi
@@ -137,8 +141,28 @@ void turnTo(uint16_t heading) // This function turns the robot until it is point
   
   
 }
-void motors(uint8_t leftSpeed, uint8_t rightSpeed) // This function turns the motors on at the given speeds (from 0-255)
+void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the motors on at the given speeds (from 0-255)
 {
-  
+  if (leftSpeed < 0)
+  {
+    digitalWrite(LEFT_DIR, LOW);
+    analogWrite(LEFT_PWM, abs(leftSpeed));
+  }
+  else
+  {
+    digitalWrite(LEFT_DIR, HIGH);
+    analogWrite(LEFT_PWM, leftSpeed);
+  }
+  if (rightSpeed < 0)
+    {
+    digitalWrite(RIGHT_DIR, LOW);
+    analogWrite(RIGHT_PWM, abs(rightSpeed));
+    }
+  else
+  {
+    digitalWrite(RIGHT_DIR, HIGH);
+    analogWrite(RIGHT_PWM, rightSpeed);
+  }
+    
 }
 

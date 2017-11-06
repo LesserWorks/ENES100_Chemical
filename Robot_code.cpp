@@ -173,7 +173,6 @@ void turnTo(uint16_t heading) // This function turns the robot until it is point
   if (robot.theta < heading)
   {
     motors(defaultSpeed, defaultSpeed*(-1));
-    
   }
   else (robot.theta > heading)
   {
@@ -184,7 +183,7 @@ void turnTo(uint16_t heading) // This function turns the robot until it is point
     getLocation(); //updates angle so that we'll know to stop turning
   }
   motors(0,0);
-  
+  return;
 }
 void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the motors on at the given speeds (from 0-255)
 {
@@ -210,7 +209,6 @@ void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the mo
   }   
 }
 
-
 void getPH(void)
 {
   uint16_t total = 0;
@@ -225,11 +223,30 @@ void getPH(void)
   phValue = map(phValue, 0, 1023, 0, 14);
   rf.baseObjective(phValue);
 }
-
-void moveToWall(void)
+// Below are MS5 functions
+void moveToWall(void) // Forward locomotion test
 {
   getLocation();
   moveTo(3900, robot.y);
+}
+void turnTest(void) // Turning test
+{
+  getLocation(); // Robot should start facing to right
+  moveTo(1000, robot.y); // Move one meter to right
+  turnTo(THREE_QUARTERS); // Turn to point down
+  moveTo(robot.x, robot.y + 250); // Move 25 cm downward
+  turnTo(0); // Turn to point to right
+  moveTo(robot.x + 250, robot.y); // Move 25 cm to right
+  turnTo(ONE_QUARTER); // Turn to point up
+  return;
+}
+void radioTest(void); // RF communications test
+{
+  Serial.begin(9600);
+  
+}
+void basebjectiveTest(void) // Navigate to pool and measure pH
+{
 }
 
 

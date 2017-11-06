@@ -25,6 +25,7 @@
 #define LEFT_PWM 5
 #define RIGHT_DIR 6
 #define RIGHT_PWM 7
+int16_t defaultSpeed = 128;
 
 // These macros give values in milliradians
 #define FULL_CIRCLE ((uint16_t)(M_PI * 2000.0)) // Two pi
@@ -134,10 +135,14 @@ uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty)
 void turnTo(uint16_t heading) // This function turns the robot until it is pointing in the given direction
 {
   getLocation();
-  int16_t xVal = robot.x;
-  int16_t yVal = robot.y;
-  int16_t dist = sq(xVal) + sq(yVal);
-  int16_t theta = sin(xVal);
+  if (robot.theta < heading)
+  {
+    motors(defaultSpeed, defaultSpeed*(-1));
+  }
+  else (robot.theta > heading)
+  {
+    motors(defaultSpeed*(-1), defaultSpeed);
+  }
   
   
 }

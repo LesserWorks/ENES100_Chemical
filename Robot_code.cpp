@@ -27,6 +27,12 @@
 #define RIGHT_PWM 7
 int16_t defaultSpeed = 128;
 
+//Definitions for measuring pH
+#define SensorPin 0          //pH meter Analog output to Arduino Analog Input 0
+unsigned long int avgValue;  //Store the average value of the sensor feedback
+float b;
+int buffer[10] //array to hold pH readings
+
 // These macros give values in milliradians
 #define FULL_CIRCLE ((uint16_t)(M_PI * 2000.0)) // Two pi
 #define THREE_QUARTER ((uint16_t)(M_PI * 1500.0)) // Three pi over two
@@ -172,7 +178,24 @@ void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the mo
   {
     digitalWrite(RIGHT_DIR, HIGH);
     analogWrite(RIGHT_PWM, rightSpeed);
-  }
-    
+  }   
 }
+
+
+void getPH()
+{
+  int total = 0;
+  for(int i=0; i<10; i++)       //Get 10 sample value from the sensor for smooth the value
+  { 
+    buffer[i]=analogRead(SensorPin);
+    delay(10);
+    total += buffer[i];
+  }
+  avgValue= total/10;
+  float phValue = map(avgValue, 0, 1023, 0, 14);
+  rf.baseObjective(phValue);
+}
+
+
+
 

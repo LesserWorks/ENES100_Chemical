@@ -226,6 +226,12 @@ void getPH(void)
   rf.baseObjective(phValue);
 }
 
+void moveToWall(void)
+{
+  getLocation();
+  moveTo(3900, robot.y);
+}
+
 
 
 

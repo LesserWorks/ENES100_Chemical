@@ -138,12 +138,17 @@ void turnTo(uint16_t heading) // This function turns the robot until it is point
   if (robot.theta < heading)
   {
     motors(defaultSpeed, defaultSpeed*(-1));
+    
   }
   else (robot.theta > heading)
   {
     motors(defaultSpeed*(-1), defaultSpeed);
   }
-  
+  while (!closeEnough(robot.theta, heading))
+  {
+    getLocation(); //updates angle so that we'll know to stop turning
+  }
+  motors(0,0);
   
 }
 void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the motors on at the given speeds (from 0-255)

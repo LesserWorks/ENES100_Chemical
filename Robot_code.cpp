@@ -30,14 +30,14 @@
 #define LEFT_ECHO 0
 #define RIGHT_TRIGGER 0
 #define RIGHT_ECHO 0
+#define PH_PIN A0
 int16_t defaultSpeed = 128;
-
+/*
 //Definitions for measuring pH
-#define SensorPin 0          //pH meter Analog output to Arduino Analog Input 0
 unsigned long int avgValue;  //Store the average value of the sensor feedback
 float b;
 int buffer[10] //array to hold pH readings
-
+*/
 // These macros give values in milliradians
 #define FULL_CIRCLE ((uint16_t)(M_PI * 2000.0)) // Two pi
 #define THREE_QUARTER ((uint16_t)(M_PI * 1500.0)) // Three pi over two
@@ -68,7 +68,6 @@ uint16_t headingToDestination(uint16_t destx, uint16_t desty);
 
 void setup() 
 {
-  
   rf.retrieveDestination();
   pool.x = (uint16_t)(1000.0 * rf.destination.x); // Convert from meters to millimeters
   pool.y = (uint16_t)(1000.0 * rf.destination.y);
@@ -100,7 +99,7 @@ uint16_t headingToDestination(uint16_t destx, uint16_t desty)
   }
   return (uint16_t)heading;
 }
-void getLocation() // This function updates the robots's coordinates
+void getLocation(void) // This function updates the robots's coordinates
 {
   rf.updateLocation();
   robot.x = (uint16_t)(1000.0 * rf.location.x); // Meters as a float to millimeters as a uint16_t
@@ -160,13 +159,13 @@ uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty)
     if((rdist || ldist) && (rdist < clearance || ldist < clearance)) // Are either nonzero and if so, within allowable clearance?
     {
       motors(0, 0);
-      return 0;
+      return 0; // We did not reach destination
     }
     motors(128, 128);
   }
   
   motors(0, 0); // Stop moving
-  return 1;
+  return 1; // We did reach destination
 }
 void turnTo(uint16_t heading) // This function turns the robot until it is pointing in the given direction
 {
@@ -212,17 +211,18 @@ void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the mo
 }
 
 
-void getPH()
+void getPH(void)
 {
-  int total = 0;
-  for(int i=0; i<10; i++)       //Get 10 sample value from the sensor for smooth the value
+  uint16_t total = 0;
+  for(uint8_t i = 0; i < 10; i++)       //Get 10 sample value from the sensor for smooth the value
   { 
-    buffer[i]=analogRead(SensorPin);
+    /*buffer[i]=analogRead(PH_PIN);
+    total += buffer[i];*/
+    total += analogRead(PH_PIN);
     delay(10);
-    total += buffer[i];
   }
-  avgValue= total/10;
-  float phValue = map(avgValue, 0, 1023, 0, 14);
+  float phValue = ((float)total) / 10.0;
+  phValue = map(phValue, 0, 1023, 0, 14);
   rf.baseObjective(phValue);
 }
 

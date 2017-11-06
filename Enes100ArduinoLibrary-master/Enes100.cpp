@@ -83,7 +83,7 @@ void Enes100::bonusObjective(double value) {
 void Enes100::endMission() {
     mSoftwareSerial->print("#end*");
     mSoftwareSerial->flush();
-    while(1); // Pretty tricky here to prevent further code execution
+    //while(1); 
 }
 
 // MARK: navigated

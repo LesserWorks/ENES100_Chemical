@@ -1,4 +1,3 @@
-
 #ifndef F_CPU
 #define F_CPU 16000000UL
 #endif
@@ -19,7 +18,7 @@
  */
 #include "Enes100.h"
 #include "NewPing.h"
-#define MARKER_ID 12
+#define MARKER_ID 7
 #define RX_PIN 8
 #define TX_PIN 9
 #define LEFT_DIR 4
@@ -32,12 +31,12 @@
 #define RIGHT_ECHO 0
 #define PH_PIN A0
 int16_t defaultSpeed = 128;
-/*
-//Definitions for measuring pH
+
+
 unsigned long int avgValue;  //Store the average value of the sensor feedback
 float b;
-int buffer[10] //array to hold pH readings
-*/
+int buf[10],temp;
+
 // These macros give values in milliradians
 #define FULL_CIRCLE ((uint16_t)(M_PI * 2000.0)) // Two pi
 #define THREE_QUARTER ((uint16_t)(M_PI * 1500.0)) // Three pi over two
@@ -77,6 +76,11 @@ void baseObjectiveTest(void);
 
 void setup() 
 {
+  delay(5000);
+  motors (128, 128);
+  delay (1000);
+  motors (0,0);
+  /*
   Serial.begin();
   delay(500);
   uint8_t success = rf.retrieveDestination();
@@ -89,6 +93,7 @@ void setup()
   pool.y = (uint16_t)(1000.0 * rf.destination.y);
   getLocation();
   moveToWall();
+  */
 }
 
 void loop() 
@@ -197,7 +202,7 @@ void turnTo(uint16_t heading) // This function turns the robot until it is point
   {
     motors(defaultSpeed, defaultSpeed*(-1));
   }
-  else (robot.theta > heading)
+  else if (robot.theta > heading)
   {
     motors(defaultSpeed*(-1), defaultSpeed);
   }
@@ -234,18 +239,39 @@ void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the mo
 
 void getPH(void)
 {
-  uint16_t total = 0;
-  for(uint8_t i = 0; i < 10; i++)       //Get 10 sample value from the sensor for smooth the value
+  for(int i=0;i<10;i++)       //Get 10 sample value from the sensor for smooth the value
   { 
-    /*buffer[i]=analogRead(PH_PIN);
-    total += buffer[i];*/
-    total += analogRead(PH_PIN);
+    buf[i]=analogRead(PH_PIN);
     delay(10);
   }
-  float phValue = ((float)total) / 10.0;
-  phValue = map(phValue, 0, 1023, 0, 14);
-  rf.baseObjective(phValue);
+  for(int i=0;i<9;i++)        //sort the analog from small to large
+  {
+    for(int j=i+1;j<10;j++)
+    {
+      if(buf[i]>buf[j])
+      {
+        temp=buf[i];
+        buf[i]=buf[j];
+        buf[j]=temp;
+      }
+    }
+  }
+  avgValue=0;
+  for(int i=2;i<8;i++)                      //take the average value of 6 center sample
+    avgValue+=buf[i];
+  float phValue=(float)avgValue*5.0/1024/6; //convert the analog into millivolt
+  phValue=3.5*phValue;                      //convert the millivolt into pH value
+  Serial.print("    pH:");  
+  Serial.print(phValue,2);
+  Serial.println(" ");
+  digitalWrite(13, HIGH);       
+  delay(800);
+  digitalWrite(13, LOW); 
+
 }
+
+
+
 // Below are MS5 functions
 void moveToWall(void) // Forward locomotion test
 {
@@ -259,7 +285,7 @@ void turnTest(void) // Turning test
 {
   getLocation(); // Robot should start facing to right
   moveTo(1000, robot.y); // Move one meter to right
-  turnTo(THREE_QUARTERS); // Turn to point down
+  turnTo(THREE_QUARTER); // Turn to point down
   moveTo(robot.x, robot.y + 250); // Move 25 cm downward
   turnTo(0); // Turn to point to right
   moveTo(robot.x + 250, robot.y); // Move 25 cm to right
@@ -267,7 +293,7 @@ void turnTest(void) // Turning test
   rf.endMission();
   return;
 }
-void radioTest(void); // RF communications test
+void radioTest(void) // RF communications test
 {
   Serial.begin(9600);
   getLocation();
@@ -277,12 +303,14 @@ void radioTest(void); // RF communications test
   Serial.println(robot.y);
   Serial.print("Theta: ");
   Serial.println(robot.theta);
+  /*
   rf.print("X: ");
   rf.println(robot.x);
   rf.print("Y: ");
   rf.println(robot.y);
   rf.print("Theta: ");
   rf.println(robot.theta);
+  */
   moveTo(robot.x + 700, robot.y);
   Serial.print("X: ");
   Serial.println(robot.x);
@@ -290,17 +318,15 @@ void radioTest(void); // RF communications test
   Serial.println(robot.y);
   Serial.print("Theta: ");
   Serial.println(robot.theta);
+  /*
   rf.print("X: ");
   rf.println(robot.x);
   rf.print("Y: ");
   rf.println(robot.y);
   rf.print("Theta: ");
   rf.println(robot.theta);
+  */
 }
 void baseObjectiveTest(void) // Navigate to pool and measure pH
 {
 }
-
-
-
-

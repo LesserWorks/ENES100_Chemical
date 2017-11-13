@@ -72,7 +72,7 @@ uint8_t clearance = 20; // Clearance in cm between robot and obstacle
 void getLocation(void);
 uint16_t headingToDestination(uint16_t destx, uint16_t desty);
 void moveTo(uint16_t destx, uint16_t desty);
-uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty);
+uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty, uint8_t clearance_cm);
 void turnTo(uint16_t heading);
 void motors(int16_t leftSpeed, int16_t rightSpeed);
 void getPH(void);
@@ -174,7 +174,7 @@ void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location wit
 // Moves to destination until an obstacle is encountered. 
 // If an obstacle is encountered, the robot stops and the function returns 0. 
 // If it reaches the destination, the robot stops and the function returns 1.
-uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty) 
+uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty, uint8_t clearance_cm) 
 {
   uint16_t heading = headingToDestination(destx, desty);
   uint8_t corrections = 0;
@@ -194,7 +194,7 @@ uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty)
     }
     uint8_t rdist = rsense.ping_cm();
     uint8_t ldist = lsense.ping_cm();
-    if((rdist || ldist) && (rdist < clearance || ldist < clearance)) // Are either nonzero and if so, within allowable clearance?
+    if((rdist || ldist) && (rdist < clearance_cm || ldist < clearance_cm)) // Are either nonzero and if so, within allowable clearance?
     {
       motors(0, 0);
       return 0; // We did not reach destination
@@ -325,4 +325,10 @@ void radioTest(void) // RF communications test
 void baseObjectiveTest(void) // Navigate to pool and measure pH
 {
   moveTo(pool.x - 100, pool.y - 100); // Drives till we are about 10 cm away from pool
+  moveToUntilObstacle(pool.x, pool.y, 2); // Drives further, then stops when we are about 2 cm from pool.
+  rf.navigated();
+  // Deploy pH probe here
+  getPH();
+  rf.endMission();
+  
 }

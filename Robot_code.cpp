@@ -65,13 +65,30 @@ uint8_t clearance = 20; // Clearance in cm between robot and obstacle
 
 void getLocation(void);
 uint16_t headingToDestination(uint16_t destx, uint16_t desty);
+void moveTo(uint16_t destx, uint16_t desty);
+uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty);
+void turnTo(uint16_t heading);
+void motors(int16_t leftSpeed, int16_t rightSpeed);
+void getPH(void);
+void moveToWall(void);
+void turnTest(void);
+void radioTest(void);
+void baseObjectiveTest(void);
 
 void setup() 
 {
-  rf.retrieveDestination();
+  Serial.begin();
+  delay(500);
+  uint8_t success = rf.retrieveDestination();
+  if(!success)
+  {
+    Serial.println("Failed to get destination.");
+    rf.println("Failed to get destination.");
+  }
   pool.x = (uint16_t)(1000.0 * rf.destination.x); // Convert from meters to millimeters
   pool.y = (uint16_t)(1000.0 * rf.destination.y);
   getLocation();
+  moveToWall();
 }
 
 void loop() 
@@ -101,7 +118,13 @@ uint16_t headingToDestination(uint16_t destx, uint16_t desty)
 }
 void getLocation(void) // This function updates the robots's coordinates
 {
-  rf.updateLocation();
+  uint8_t success = rf.updateLocation();
+  if(!success)
+  {
+    Serial.println("Failed to update location.");
+    rf.println("Failed to update location.");
+    return;
+  }
   robot.x = (uint16_t)(1000.0 * rf.location.x); // Meters as a float to millimeters as a uint16_t
   robot.y = (uint16_t)(1000.0 * rf.location.y);
   robot.theta = (uint16_t)(1000.0 * rf.location.theta); // Radians to milliradians
@@ -228,6 +251,9 @@ void moveToWall(void) // Forward locomotion test
 {
   getLocation();
   moveTo(3900, robot.y);
+  rf.navigated();
+  rf.println("Reached wall");
+  rf.endMission();
 }
 void turnTest(void) // Turning test
 {
@@ -238,14 +264,40 @@ void turnTest(void) // Turning test
   turnTo(0); // Turn to point to right
   moveTo(robot.x + 250, robot.y); // Move 25 cm to right
   turnTo(ONE_QUARTER); // Turn to point up
+  rf.endMission();
   return;
 }
 void radioTest(void); // RF communications test
 {
   Serial.begin(9600);
-  
+  getLocation();
+  Serial.print("X: ");
+  Serial.println(robot.x);
+  Serial.print("Y: ");
+  Serial.println(robot.y);
+  Serial.print("Theta: ");
+  Serial.println(robot.theta);
+  rf.print("X: ");
+  rf.println(robot.x);
+  rf.print("Y: ");
+  rf.println(robot.y);
+  rf.print("Theta: ");
+  rf.println(robot.theta);
+  moveTo(robot.x + 700, robot.y);
+  Serial.print("X: ");
+  Serial.println(robot.x);
+  Serial.print("Y: ");
+  Serial.println(robot.y);
+  Serial.print("Theta: ");
+  Serial.println(robot.theta);
+  rf.print("X: ");
+  rf.println(robot.x);
+  rf.print("Y: ");
+  rf.println(robot.y);
+  rf.print("Theta: ");
+  rf.println(robot.theta);
 }
-void basebjectiveTest(void) // Navigate to pool and measure pH
+void baseObjectiveTest(void) // Navigate to pool and measure pH
 {
 }
 

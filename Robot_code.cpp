@@ -30,7 +30,8 @@
 #define RIGHT_TRIGGER 0
 #define RIGHT_ECHO 0
 #define PH_PIN A0
-int16_t defaultSpeed = 128;
+static const int16_t defaultSpeed = 128; // A positive number passed to the motors() function 
+                                         // makes the motor turn forward
 /*
 //Definitions for measuring pH
 unsigned long int avgValue;  //Store the average value of the sensor feedback
@@ -117,7 +118,7 @@ uint16_t headingToDestination(uint16_t destx, uint16_t desty)
   {
     return dx > 0 ? 0 : HALF_CIRCLE;
   }
-  int16_t heading = 1000.0 * atan2(dy, dx); // Warning: Expensive calculation!
+  int16_t heading = 1000.0 * atan2(dy, dx); 
   if(heading < 0)
   {
     heading = FULL_CIRCLE + heading; // (0, 360) instead of (-180, 180)
@@ -158,7 +159,7 @@ void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location wit
       heading = headingToDestination(destx, desty); // Recompute heading
       corrections = 0; // Reset the number of corrections
     }
-    motors(128, 128);
+    motors(defaultSpeed, defaultSpeed);
   }
   
   motors(0, 0); // Stop moving
@@ -192,7 +193,7 @@ uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty)
       motors(0, 0);
       return 0; // We did not reach destination
     }
-    motors(128, 128);
+    motors(defaultSpeed, defaultSpeed);
   }
   
   motors(0, 0); // Stop moving
@@ -201,23 +202,23 @@ uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty)
 void turnTo(uint16_t heading) // This function turns the robot until it is pointing in the given direction
 {
   getLocation();
-  if (robot.theta < heading)
-  {
-    motors(defaultSpeed, defaultSpeed*(-1));
-  }
-  else //(robot.theta > heading)
-  {
+  if(robot.theta < heading) // Must turn counterclockwise (to left)
+  { // To turn left, right motors go forward and left motors go backward
     motors(defaultSpeed*(-1), defaultSpeed);
   }
-  while (!closeEnough(robot.theta, heading))
+  else // Must turn clockwise (to right)
+  { // To turn right, left motors for forward and right motors go backward
+    motors(defaultSpeed, defaultSpeed*(-1));
+  }
+  while(!closeEnough(robot.theta, heading))
   {
     getLocation(); //updates angle so that we'll know to stop turning
   }
   motors(0,0);
   return;
 }
-void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the motors on at the given speeds (from 0-255)
-{
+void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the motors on at the given speeds (from -255-255)
+{ // A positive number causes that motor to turn forward
   if(leftSpeed == 0)
   {
     digitalWrite(LEFT_DIR, LOW);
@@ -228,20 +229,20 @@ void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the mo
     digitalWrite(RIGHT_DIR, LOW);
     digitalWrite(RIGHT_PWM, 0);
   }
-  if (leftSpeed < 0)
+  if(leftSpeed < 0)
   {
     digitalWrite(LEFT_DIR, LOW);
-    analogWrite(LEFT_PWM, abs(leftSpeed));
+    analogWrite(LEFT_PWM, (uint8_t)(leftSpeed * (-1)));
   }
   else
   {
     digitalWrite(LEFT_DIR, HIGH);
     analogWrite(LEFT_PWM, leftSpeed);
   }
-  if (rightSpeed < 0)
+  if(rightSpeed < 0)
     {
     digitalWrite(RIGHT_DIR, LOW);
-    analogWrite(RIGHT_PWM, abs(rightSpeed));
+    analogWrite(RIGHT_PWM, (uint8_t)(rightSpeed *(-1)));
     }
   else
   {
@@ -317,4 +318,5 @@ void radioTest(void) // RF communications test
 }
 void baseObjectiveTest(void) // Navigate to pool and measure pH
 {
+  moveTo(pool.x - 100, pool.y - 100); // Drives till we are about 10 cm away from pool
 }

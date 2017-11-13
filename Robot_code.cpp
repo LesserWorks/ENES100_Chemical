@@ -18,25 +18,25 @@
  */
 #include "Enes100.h"
 #include "NewPing.h"
-#define MARKER_ID 7
+#define MARKER_ID 12
 #define RX_PIN 8
 #define TX_PIN 9
 #define LEFT_DIR 4
 #define LEFT_PWM 5
-#define RIGHT_DIR 6
-#define RIGHT_PWM 7
+#define RIGHT_PWM 6
+#define RIGHT_DIR 7
 #define LEFT_TRIGGER 0
 #define LEFT_ECHO 0
 #define RIGHT_TRIGGER 0
 #define RIGHT_ECHO 0
 #define PH_PIN A0
 int16_t defaultSpeed = 128;
-
-
+/*
+//Definitions for measuring pH
 unsigned long int avgValue;  //Store the average value of the sensor feedback
 float b;
-int buf[10],temp;
-
+int buffer[10] //array to hold pH readings
+*/
 // These macros give values in milliradians
 #define FULL_CIRCLE ((uint16_t)(M_PI * 2000.0)) // Two pi
 #define THREE_QUARTER ((uint16_t)(M_PI * 1500.0)) // Three pi over two
@@ -76,13 +76,8 @@ void baseObjectiveTest(void);
 
 void setup() 
 {
+  Serial.begin(9600);
   delay(5000);
-  motors (128, 128);
-  delay (1000);
-  motors (0,0);
-  /*
-  Serial.begin();
-  delay(500);
   uint8_t success = rf.retrieveDestination();
   if(!success)
   {
@@ -93,7 +88,15 @@ void setup()
   pool.y = (uint16_t)(1000.0 * rf.destination.y);
   getLocation();
   moveToWall();
-  */
+  /*motors(128, 128);
+  delay(1000);
+  motors(0, 0);
+  delay(1000);
+  motors(128, -128);
+  delay(1000);
+  motors(-128, 128);
+  delay(1000);
+  motors(0, 0);*/
 }
 
 void loop() 
@@ -202,7 +205,7 @@ void turnTo(uint16_t heading) // This function turns the robot until it is point
   {
     motors(defaultSpeed, defaultSpeed*(-1));
   }
-  else if (robot.theta > heading)
+  else //(robot.theta > heading)
   {
     motors(defaultSpeed*(-1), defaultSpeed);
   }
@@ -215,6 +218,16 @@ void turnTo(uint16_t heading) // This function turns the robot until it is point
 }
 void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the motors on at the given speeds (from 0-255)
 {
+  if(leftSpeed == 0)
+  {
+    digitalWrite(LEFT_DIR, LOW);
+    digitalWrite(LEFT_PWM, 0);
+  }
+  if(rightSpeed == 0)
+  {
+    digitalWrite(RIGHT_DIR, LOW);
+    digitalWrite(RIGHT_PWM, 0);
+  }
   if (leftSpeed < 0)
   {
     digitalWrite(LEFT_DIR, LOW);
@@ -239,39 +252,18 @@ void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the mo
 
 void getPH(void)
 {
-  for(int i=0;i<10;i++)       //Get 10 sample value from the sensor for smooth the value
+  uint16_t total = 0;
+  for(uint8_t i = 0; i < 10; i++)       //Get 10 sample value from the sensor for smooth the value
   { 
-    buf[i]=analogRead(PH_PIN);
+    /*buffer[i]=analogRead(PH_PIN);
+    total += buffer[i];*/
+    total += analogRead(PH_PIN);
     delay(10);
   }
-  for(int i=0;i<9;i++)        //sort the analog from small to large
-  {
-    for(int j=i+1;j<10;j++)
-    {
-      if(buf[i]>buf[j])
-      {
-        temp=buf[i];
-        buf[i]=buf[j];
-        buf[j]=temp;
-      }
-    }
-  }
-  avgValue=0;
-  for(int i=2;i<8;i++)                      //take the average value of 6 center sample
-    avgValue+=buf[i];
-  float phValue=(float)avgValue*5.0/1024/6; //convert the analog into millivolt
-  phValue=3.5*phValue;                      //convert the millivolt into pH value
-  Serial.print("    pH:");  
-  Serial.print(phValue,2);
-  Serial.println(" ");
-  digitalWrite(13, HIGH);       
-  delay(800);
-  digitalWrite(13, LOW); 
-
+  float phValue = ((float)total) / 10.0;
+  phValue = map(phValue, 0, 1023, 0, 14);
+  rf.baseObjective(phValue);
 }
-
-
-
 // Below are MS5 functions
 void moveToWall(void) // Forward locomotion test
 {
@@ -303,14 +295,12 @@ void radioTest(void) // RF communications test
   Serial.println(robot.y);
   Serial.print("Theta: ");
   Serial.println(robot.theta);
-  /*
   rf.print("X: ");
-  rf.println(robot.x);
+  rf.println((int)robot.x);
   rf.print("Y: ");
-  rf.println(robot.y);
+  rf.println((int)robot.y);
   rf.print("Theta: ");
-  rf.println(robot.theta);
-  */
+  rf.println((int)robot.theta);
   moveTo(robot.x + 700, robot.y);
   Serial.print("X: ");
   Serial.println(robot.x);
@@ -318,14 +308,12 @@ void radioTest(void) // RF communications test
   Serial.println(robot.y);
   Serial.print("Theta: ");
   Serial.println(robot.theta);
-  /*
   rf.print("X: ");
-  rf.println(robot.x);
+  rf.println((int)robot.x);
   rf.print("Y: ");
-  rf.println(robot.y);
+  rf.println((int)robot.y);
   rf.print("Theta: ");
-  rf.println(robot.theta);
-  */
+  rf.println((int)robot.theta);
 }
 void baseObjectiveTest(void) // Navigate to pool and measure pH
 {

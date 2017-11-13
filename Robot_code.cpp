@@ -19,16 +19,22 @@
 #include "Enes100.h"
 #include "NewPing.h"
 #define MARKER_ID 12
+// Pins for APC
 #define RX_PIN 8
 #define TX_PIN 9
+// Pins for drive motors
+// Motor terminal 1
 #define LEFT_DIR 4
 #define LEFT_PWM 5
+// Motor terminal 2
 #define RIGHT_PWM 6
 #define RIGHT_DIR 7
+// Pins for sonor sensors
 #define LEFT_TRIGGER 0
 #define LEFT_ECHO 0
 #define RIGHT_TRIGGER 0
 #define RIGHT_ECHO 0
+// Pin for pH meter
 #define PH_PIN A0
 static const int16_t defaultSpeed = 128; // A positive number passed to the motors() function 
                                          // makes the motor turn forward

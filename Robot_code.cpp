@@ -1,7 +1,11 @@
 #ifndef F_CPU
 #define F_CPU 16000000UL
 #endif
-
+#define STOP 0U
+#define FORWARD 1U
+#define BACKWARD 2U
+#define LEFT 3U
+#define RIGHT 4U
 /* 
  * For atan2(), if y is 0, it gives PI, if x is 0, it gives PI / 2, if both are 0, it gives 0.
  * atan2 returns a value (-PI, PI) in radians
@@ -18,10 +22,19 @@
  */
 #include "Enes100.h"
 #include "NewPing.h"
-#define MARKER_ID 12
+#define MARKER_ID 7
 // Pins for APC
 #define RX_PIN 8
 #define TX_PIN 9
+// Pins and colors for status LED
+#define RED 2
+#define BLUE 3
+#define GREEN 10
+#define MAGENTA 4
+#define CYAN 5
+#define YELLOW 6
+#define WHITE 7
+#define OFF 0
 // Pins for drive motors
 // Motor terminal 1
 #define LEFT_DIR 4
@@ -36,8 +49,10 @@
 #define RIGHT_ECHO 0
 // Pin for pH meter
 #define PH_PIN A0
-static const int16_t defaultSpeed = 128; // A positive number passed to the motors() function 
+static const int16_t defaultSpeed = 250; // A positive number passed to the motors() function 
                                          // makes the motor turn forward
+static const int16_t halfDefault = 255;  
+static const int16_t turnSpeed = 190;                                       
 /*
 //Definitions for measuring pH
 unsigned long int avgValue;  //Store the average value of the sensor feedback
@@ -67,9 +82,10 @@ struct coord // Use this instead of provided coordinate class because theirs use
 
 struct coord robot; // Updated with coordinates whenevey they are received (the current location of robot).
 struct coord pool;
-uint8_t clearance = 20; // Clearance in cm between robot and obstacle
+//uint8_t clearance = 20; // Clearance in cm between robot and obstacle
 
 void getLocation(void);
+/* Old functions */
 uint16_t headingToDestination(uint16_t destx, uint16_t desty);
 void moveTo(uint16_t destx, uint16_t desty);
 uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty, uint8_t clearance_cm);
@@ -81,11 +97,24 @@ void turnTest(void);
 void radioTest(void);
 void baseObjectiveTest(void);
 
+/* New functions */
+void mot(const uint8_t speed, const uint8_t mode);
+void turn2(const uint16_t heading, const uint8_t speed);
+
 void setup() 
 {
+  pinMode(RED, 1);
+  pinMode(GREEN, 1);
+  pinMode(BLUE, 1);
+  status(OFF);
   Serial.begin(9600);
-  delay(5000);
-  uint8_t success = rf.retrieveDestination();
+  status(RED);
+  delay(750);
+  status(WHITE);
+  delay(750);
+  status(GREEN);
+  delay(750);
+  bool success = rf.retrieveDestination();
   if(!success)
   {
     Serial.println("Failed to get destination.");
@@ -93,25 +122,23 @@ void setup()
   }
   pool.x = (uint16_t)(1000.0 * rf.destination.x); // Convert from meters to millimeters
   pool.y = (uint16_t)(1000.0 * rf.destination.y);
-  getLocation();
-  moveToWall();
-  /*motors(128, 128);
-  delay(1000);
-  motors(0, 0);
-  delay(1000);
-  motors(128, -128);
-  delay(1000);
-  motors(-128, 128);
-  delay(1000);
-  motors(0, 0);*/
 }
 
 void loop() 
 {
   getLocation();
+  delay(1000);
+  /*getLocation();
+  rf.print("X: ");
+  rf.println((int)robot.x);
+  rf.print("Y: ");
+  rf.println((int)robot.y);
+  rf.print("Theta: ");
+  rf.println((int)robot.theta);
+  delay(1000);*/
 }
 
-uint16_t headingToDestination(uint16_t destx, uint16_t desty)
+uint16_t headingToDestination(uint16_t destx, uint16_t desty) // This works, has been tested
 {
   int16_t dy = (int16_t)desty - (int16_t)robot.y;
   int16_t dx = (int16_t)destx - (int16_t)robot.x;
@@ -133,16 +160,34 @@ uint16_t headingToDestination(uint16_t destx, uint16_t desty)
 }
 void getLocation(void) // This function updates the robots's coordinates
 {
-  uint8_t success = rf.updateLocation();
+  status(BLUE);
+  bool success = rf.updateLocation();
   if(!success)
   {
     Serial.println("Failed to update location.");
     rf.println("Failed to update location.");
-    return;
+    status(RED);
+  }
+  else
+  {
+    status(GREEN);
   }
   robot.x = (uint16_t)(1000.0 * rf.location.x); // Meters as a float to millimeters as a uint16_t
   robot.y = (uint16_t)(1000.0 * rf.location.y);
-  robot.theta = (uint16_t)(1000.0 * rf.location.theta); // Radians to milliradians
+  //robot.theta = (uint16_t)(1000.0 * rf.location.theta); // Radians to milliradians
+  int16_t temp = 1000.0 * rf.location.theta; // If update is unsuccessful, it just writes same value back into robot.theta
+  if(temp < 0)
+  {
+    robot.theta = (uint16_t)(temp + FULL_CIRCLE);
+  }
+  else
+  {
+    robot.theta = (uint16_t)temp;
+  }
+  rf.print("Theta: ");
+  rf.println((int)robot.theta);
+  Serial.print("Theta: ");
+  Serial.println(robot.theta);
   // The following line references theta from east instead of north, if necessary
   //robot.theta = robot.theta > THREE_QUARTER ? robot.theta - THREE_QUARTER : robot.theta + ONE_QUARTER;
   return;
@@ -154,10 +199,27 @@ void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location wit
   while(!closeEnough(robot.x, destx) || !closeEnough(robot.y, desty))
   { // Not sure if this is the best way, but it should work.
     getLocation(); // Update our location and heading
-    if(!closeEnough(robot.theta, heading)) // Have we drifted off course?
+    int16_t highb = 0;
+    int16_t lowb = 0;
+    if((int16_t)heading - tol < 0) // This bunch of if statements just calculates a margin of error for the heading
     {
-      motors(0, 0); // Stop motors
-      turnTo(heading); // Correct our heading if we have drifted off course
+      lowb = 0;
+      highb = (int16_t)heading + tol;
+    }
+    else if((int16_t)heading + tol > ((int16_t)FULL_CIRCLE))
+    {
+      highb = (int16_t)FULL_CIRCLE;
+      lowb = (int16_t)heading - tol;
+    }
+    else
+    {
+      highb = (int16_t)heading + tol;
+      lowb = (int16_t)heading - tol;
+    }
+    if(!(((int16_t)robot.theta > lowb) && ((int16_t)robot.theta < highb))) // Have we drifted off course?
+    {
+      mot(0, STOP); // Stop motors
+      turn2(heading, turnSpeed); // Correct our heading if we have drifted off course
       corrections++;
     }
     if(corrections > 10) // If we have had to correct this many times, we will probably not hit the destination
@@ -165,10 +227,10 @@ void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location wit
       heading = headingToDestination(destx, desty); // Recompute heading
       corrections = 0; // Reset the number of corrections
     }
-    motors(defaultSpeed, defaultSpeed);
+    mot(defaultSpeed, FORWARD);
   }
   
-  motors(0, 0); // Stop moving
+  mot(0, STOP); // Stop moving
   return;
 }
 // Moves to destination until an obstacle is encountered. 
@@ -181,10 +243,27 @@ uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty, uint8_t clearance_cm
   while(!closeEnough(robot.x, destx) || !closeEnough(robot.y, desty))
   { // Not sure if this is the best way, but it should work.
     getLocation(); // Update our location and heading
-    if(!closeEnough(robot.theta, heading)) // Have we drifted off course?
+    int16_t highb = 0;
+    int16_t lowb = 0;
+    if((int16_t)heading - tol < 0) // This bunch of if statements just calculates a margin of error for the heading
     {
-      motors(0, 0); // Stop motors
-      turnTo(heading); // Correct our heading if we have drifted off course
+      lowb = 0;
+      highb = (int16_t)heading + tol;
+    }
+    else if((int16_t)heading + tol > ((int16_t)FULL_CIRCLE))
+    {
+      highb = (int16_t)FULL_CIRCLE;
+      lowb = (int16_t)heading - tol;
+    }
+    else
+    {
+      highb = (int16_t)heading + tol;
+      lowb = (int16_t)heading - tol;
+    }
+    if(!(((int16_t)robot.theta > lowb) && ((int16_t)robot.theta < highb))) // Have we drifted off course?
+    {
+      mot(0, STOP); // Stop motors
+      turn2(heading, turnSpeed); // Correct our heading if we have drifted off course
       corrections++;
     }
     if(corrections > 10) // If we have had to correct this many times, we will probably not hit the destination
@@ -196,25 +275,25 @@ uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty, uint8_t clearance_cm
     uint8_t ldist = lsense.ping_cm();
     if((rdist || ldist) && (rdist < clearance_cm || ldist < clearance_cm)) // Are either nonzero and if so, within allowable clearance?
     {
-      motors(0, 0);
+      mot(0, STOP);
       return 0; // We did not reach destination
     }
-    motors(defaultSpeed, defaultSpeed);
+    mot(defaultSpeed, defaultSpeed);
   }
   
-  motors(0, 0); // Stop moving
+  mot(0, STOP); // Stop moving
   return 1; // We did reach destination
 }
-void turnTo(uint16_t heading) // This function turns the robot until it is pointing in the given direction
+void turnTo(uint16_t heading) // Use turn2 instead
 {
   getLocation();
   if(robot.theta < heading) // Must turn counterclockwise (to left)
   { // To turn left, right motors go forward and left motors go backward
-    motors(defaultSpeed*(-1), defaultSpeed);
+    motors(defaultSpeed*-1, defaultSpeed);
   }
   else // Must turn clockwise (to right)
   { // To turn right, left motors for forward and right motors go backward
-    motors(defaultSpeed, defaultSpeed*(-1));
+    motors(halfDefault, halfDefault*(-1));
   }
   while(!closeEnough(robot.theta, heading))
   {
@@ -223,7 +302,64 @@ void turnTo(uint16_t heading) // This function turns the robot until it is point
   motors(0,0);
   return;
 }
-void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the motors on at the given speeds (from -255-255)
+void turn2(const uint16_t heading, const uint8_t speed)
+{
+  getLocation();
+  int16_t diff = (int16_t)heading - (int16_t)robot.theta;
+  Serial.println(diff);
+  if(diff > 0) 
+  {
+    if(diff > (int16_t)HALF_CIRCLE) // diff is within (180, 360)
+    {
+       mot(speed, RIGHT);
+       Serial.println("Turning right");
+    }
+    else // diff is within (0, 180)
+    {
+      mot(speed, LEFT);
+      Serial.println("Turning left");
+    }
+  }
+  else
+  {
+    if(diff > (-1)*(int16_t)HALF_CIRCLE) // diff is within (-180, 0)
+    {
+      mot(speed, RIGHT);
+      Serial.println("Turning right-else");
+    }
+    else // diff is within (-360, -180)
+    {
+      mot(speed, LEFT);
+      Serial.println("Turning left-else");
+    }
+  }
+  int16_t highb = 0;
+  int16_t lowb = 0;
+  if((int16_t)heading - tol < 0)
+  {
+    lowb = 0;
+    highb = (int16_t)heading + tol;
+  }
+  else if((int16_t)heading + tol > ((int16_t)FULL_CIRCLE))
+  {
+    highb = (int16_t)FULL_CIRCLE;
+    lowb = (int16_t)heading - tol;
+  }
+  else
+  {
+    highb = (int16_t)heading + tol;
+    lowb = (int16_t)heading - tol;
+  }
+  Serial.println(lowb);
+  Serial.println(highb);
+  while(!(((int16_t)robot.theta > lowb) && ((int16_t)robot.theta < highb)))
+  {
+    getLocation(); //updates angle so that we'll know to stop turning
+  }
+  mot(0,STOP);
+  return;
+}
+void motors(int16_t leftSpeed, int16_t rightSpeed) // Use mot() instead
 { // A positive number causes that motor to turn forward
   if(leftSpeed == 0)
   {
@@ -238,7 +374,10 @@ void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the mo
   if(leftSpeed < 0)
   {
     digitalWrite(LEFT_DIR, LOW);
-    analogWrite(LEFT_PWM, (uint8_t)(leftSpeed * (-1)));
+    int8_t val = (leftSpeed * (-1));
+    //Serial.println(val);
+    //analogWrite(LEFT_PWM, (uint8_t)(leftSpeed * (-1)));
+    analogWrite(LEFT_PWM, val);
   }
   else
   {
@@ -248,7 +387,7 @@ void motors(int16_t leftSpeed, int16_t rightSpeed) // This function turns the mo
   if(rightSpeed < 0)
     {
     digitalWrite(RIGHT_DIR, LOW);
-    analogWrite(RIGHT_PWM, (uint8_t)(rightSpeed *(-1)));
+    analogWrite(RIGHT_PWM, (rightSpeed *(-1)));
     }
   else
   {
@@ -283,13 +422,51 @@ void moveToWall(void) // Forward locomotion test
 void turnTest(void) // Turning test
 {
   getLocation(); // Robot should start facing to right
-  moveTo(1000, robot.y); // Move one meter to right
-  turnTo(THREE_QUARTER); // Turn to point down
-  moveTo(robot.x, robot.y + 250); // Move 25 cm downward
-  turnTo(0); // Turn to point to right
-  moveTo(robot.x + 250, robot.y); // Move 25 cm to right
-  turnTo(ONE_QUARTER); // Turn to point up
-  rf.endMission();
+  moveTo(robot.x + 1000, robot.y); // Move one meter to right
+  turn2(THREE_QUARTER, turnSpeed); // Turn to point down
+  moveTo(robot.x, robot.y - 250); // Move 25 cm downward
+  turn2(HALF_CIRCLE, turnSpeed); // Turn to point to left
+  moveTo(robot.x - 250, robot.y); // Move 25 cm to left
+  turn2(THREE_QUARTER, turnSpeed); // Turn to point down
+  /*while(robot.theta > ONE_QUARTER)
+  {
+    motors(defaultSpeed*-1, defaultSpeed);
+    getLocation();
+    rf.print("X: ");
+  rf.println((int)robot.x);
+  rf.print("Y: ");
+  rf.println((int)robot.y);
+  rf.print("Theta: ");
+  rf.println((int)robot.theta);
+  }
+  motors(0, 0);
+  delay(500);
+  while(robot.theta < HALF_CIRCLE)
+  {
+    motors(defaultSpeed, defaultSpeed*-1);
+    getLocation();
+    rf.print("X: ");
+  rf.println((int)robot.x);
+  rf.print("Y: ");
+  rf.println((int)robot.y);
+  rf.print("Theta: ");
+  rf.println((int)robot.theta);
+  }
+  motors(0, 0);
+  delay(500);
+  while(robot.theta > ONE_QUARTER)
+  {
+    motors(defaultSpeed*-1, defaultSpeed);
+    getLocation();
+    rf.print("X: ");
+  rf.println((int)robot.x);
+  rf.print("Y: ");
+  rf.println((int)robot.y);
+  rf.print("Theta: ");
+  rf.println((int)robot.theta);
+  }
+  motors(0, 0);
+  //rf.endMission();*/
   return;
 }
 void radioTest(void) // RF communications test
@@ -331,4 +508,88 @@ void baseObjectiveTest(void) // Navigate to pool and measure pH
   getPH();
   rf.endMission();
   
+}
+void mot(const uint8_t speed, const uint8_t mode) // a better motor function
+{ // This function requires the black wires from all motors to be in the + side of the terminal
+  // and for the right motors to connect to terminal 1
+  switch(mode)
+  {
+    case FORWARD:
+      digitalWrite(LEFT_DIR, 1);
+      digitalWrite(RIGHT_DIR, 1);
+      analogWrite(LEFT_PWM, speed);
+      analogWrite(RIGHT_PWM, speed);
+      return;
+    case BACKWARD:
+      digitalWrite(LEFT_DIR, 0);
+      digitalWrite(RIGHT_DIR, 0);
+      analogWrite(LEFT_PWM, speed);
+      analogWrite(RIGHT_PWM, speed);
+      return;
+    case LEFT:
+      digitalWrite(LEFT_DIR, 1);
+      digitalWrite(RIGHT_DIR, 0);
+      analogWrite(LEFT_PWM, speed);
+      analogWrite(RIGHT_PWM, speed);
+      return;
+    case RIGHT:
+      digitalWrite(LEFT_DIR, 0);
+      digitalWrite(RIGHT_DIR, 1);
+      analogWrite(LEFT_PWM, speed);
+      analogWrite(RIGHT_PWM, speed);
+      return;
+    default:
+      digitalWrite(LEFT_DIR, 0);
+      digitalWrite(RIGHT_DIR, 0);
+      analogWrite(LEFT_PWM, 0);
+      analogWrite(RIGHT_PWM, 0);
+      return;
+  }
+}
+void status(const uint8_t color)
+{
+  switch(color)
+  {
+    case RED:
+      digitalWrite(RED, 0);
+      digitalWrite(GREEN, 1);
+      digitalWrite(BLUE, 1);
+      return;
+    case GREEN:
+      digitalWrite(RED, 1);
+      digitalWrite(GREEN, 0);
+      digitalWrite(BLUE, 1);
+      return;
+    case BLUE:
+      digitalWrite(RED, 1);
+      digitalWrite(GREEN, 1);
+      digitalWrite(BLUE, 0);
+      return;
+    case MAGENTA:
+      digitalWrite(RED, 0);
+      digitalWrite(GREEN, 1);
+      digitalWrite(BLUE, 0);
+      return;
+    case CYAN:
+      digitalWrite(RED, 1);
+      digitalWrite(GREEN, 0);
+      digitalWrite(BLUE, 0);
+      return;
+    case YELLOW:
+      digitalWrite(RED, 0);
+      digitalWrite(GREEN, 0);
+      digitalWrite(BLUE, 1);
+      return;
+    case WHITE:
+      digitalWrite(RED, 0);
+      digitalWrite(GREEN, 0);
+      digitalWrite(BLUE, 0);
+      return;
+      
+    default:
+      digitalWrite(RED, 1);
+      digitalWrite(GREEN, 1);
+      digitalWrite(BLUE, 1);
+      return; 
+  }
 }

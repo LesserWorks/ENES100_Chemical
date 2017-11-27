@@ -6,6 +6,8 @@
 #define BACKWARD 2U
 #define LEFT 3U
 #define RIGHT 4U
+#define LEFT_SWING 5U
+#define RIGHT_SWING 6U
 /* 
  * For atan2(), if y is 0, it gives PI, if x is 0, it gives PI / 2, if both are 0, it gives 0.
  * atan2 returns a value (-PI, PI) in radians
@@ -22,14 +24,16 @@
  */
 #include "Enes100.h"
 #include "NewPing.h"
-#define MARKER_ID 7
+#include "Servo.h"
+// 3, 5, 6, 9, 10, 11 are PWM
+#define MARKER_ID 73
 // Pins for APC
-#define RX_PIN 8
-#define TX_PIN 9
+#define RX_PIN 12
+#define TX_PIN 13
 // Pins and colors for status LED
 #define RED 2
 #define BLUE 3
-#define GREEN 10
+#define GREEN 8
 #define MAGENTA 4
 #define CYAN 5
 #define YELLOW 6
@@ -43,16 +47,16 @@
 #define RIGHT_PWM 6
 #define RIGHT_DIR 7
 // Pins for sonor sensors
-#define LEFT_TRIGGER 0
-#define LEFT_ECHO 0
-#define RIGHT_TRIGGER 0
-#define RIGHT_ECHO 0
+#define LEFT_TRIGGER A0
+#define LEFT_ECHO A0
+#define RIGHT_TRIGGER A0
+#define RIGHT_ECHO A0
 // Pin for pH meter
 #define PH_PIN A0
-static const int16_t defaultSpeed = 250; // A positive number passed to the motors() function 
+static const int16_t defaultSpeed = 200; // A positive number passed to the motors() function 
                                          // makes the motor turn forward
 static const int16_t halfDefault = 255;  
-static const int16_t turnSpeed = 190;                                       
+static const int16_t turnSpeed = 220;                                       
 /*
 //Definitions for measuring pH
 unsigned long int avgValue;  //Store the average value of the sensor feedback
@@ -65,13 +69,15 @@ int buffer[10] //array to hold pH readings
 #define HALF_CIRCLE ((uint16_t)(M_PI * 1000.0)) // Pi
 #define ONE_QUARTER ((uint16_t)(M_PI * 500.0)) // Pi over two
 
-#define tol 50 // Tolerance in millimeters (or milliradians)
+#define tol 100 // Tolerance in millimeters (or milliradians)
 #define degToRad(degree) ((degree * M_PI) / 180.0)
 #define radToDeg(radian) ((radian * 180.0) / M_PI)
 #define closeEnough(a,b) (a <= (b + tol) && a >= (b - tol)) // True if a is within (b - tol, b + tol)
 Enes100 rf("The Swiss Army Bot", CHEMICAL, MARKER_ID, RX_PIN, TX_PIN);
 NewPing rsense(RIGHT_TRIGGER, RIGHT_ECHO, 255);
 NewPing lsense(LEFT_TRIGGER, LEFT_ECHO, 255);
+Servo lserv;
+Servo rserv;
 
 struct coord // Use this instead of provided coordinate class because theirs uses floats
 {
@@ -107,6 +113,8 @@ void setup()
   pinMode(GREEN, 1);
   pinMode(BLUE, 1);
   status(OFF);
+  
+  rserv.attach(9);
   Serial.begin(9600);
   status(RED);
   delay(750);
@@ -114,7 +122,7 @@ void setup()
   delay(750);
   status(GREEN);
   delay(750);
-  bool success = rf.retrieveDestination();
+ /* bool success = rf.retrieveDestination();
   if(!success)
   {
     Serial.println("Failed to get destination.");
@@ -122,11 +130,42 @@ void setup()
   }
   pool.x = (uint16_t)(1000.0 * rf.destination.x); // Convert from meters to millimeters
   pool.y = (uint16_t)(1000.0 * rf.destination.y);
+  rf.print("Pool coordinates: (");
+  rf.print((int)pool.x);
+  rf.print(", ");
+  rf.print((int)pool.y);
+  rf.println(") mm");*/
+  mot(0, STOP);
+  //turnTest();
+  //lserv.write(0);
+  lserv.attach(10);
+  lserv.write(0);
+  delay(5000);
+  
+  
 }
 
 void loop() 
 {
-  getLocation();
+  //getLocation();
+  status(YELLOW);
+  Serial.println("yellow");
+  for(uint8_t i = 0; i < 181; i += 1)
+  {
+    lserv.write(i);
+    Serial.println(i);
+    delay(15);
+  }
+  
+  delay(1000);
+  status(CYAN);
+  Serial.println("cyan");
+  for(int16_t i = 181; i > 0; i--)
+  {
+    lserv.write(i);
+    Serial.println(i);
+    delay(15);
+  }
   delay(1000);
   /*getLocation();
   rf.print("X: ");
@@ -190,6 +229,27 @@ void getLocation(void) // This function updates the robots's coordinates
   Serial.println(robot.theta);
   // The following line references theta from east instead of north, if necessary
   //robot.theta = robot.theta > THREE_QUARTER ? robot.theta - THREE_QUARTER : robot.theta + ONE_QUARTER;
+  return;
+}
+void moveToNoCorrection(int16_t destx, int16_t desty)
+{
+  if(abs((int16_t)robot.x - destx) < abs((int16_t)robot.y - desty)) // Closer to x, so move y
+  {
+    while(!closeEnough((int16_t)robot.y, desty))
+  {
+    getLocation();
+    mot(defaultSpeed, FORWARD);
+  }
+  }
+  else // Closer to y, so move x
+  {
+  while(!closeEnough((int16_t)robot.x, destx))
+  {
+    getLocation();
+    mot(defaultSpeed, FORWARD);
+  }
+  }
+  mot(0, STOP);
   return;
 }
 void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location without accounting for obstacles
@@ -421,12 +481,13 @@ void moveToWall(void) // Forward locomotion test
 }
 void turnTest(void) // Turning test
 {
+  rf.println("Beginning turn test");
   getLocation(); // Robot should start facing to right
-  moveTo(robot.x + 1000, robot.y); // Move one meter to right
+  moveToNoCorrection(robot.x + 100, robot.y); // Move one meter to right
   turn2(THREE_QUARTER, turnSpeed); // Turn to point down
-  moveTo(robot.x, robot.y - 250); // Move 25 cm downward
+  moveToNoCorrection(robot.x, robot.y - 100); // Move 25 cm downward
   turn2(HALF_CIRCLE, turnSpeed); // Turn to point to left
-  moveTo(robot.x - 250, robot.y); // Move 25 cm to left
+  moveToNoCorrection(robot.x - 100, robot.y); // Move 25 cm to left
   turn2(THREE_QUARTER, turnSpeed); // Turn to point down
   /*while(robot.theta > ONE_QUARTER)
   {
@@ -526,16 +587,28 @@ void mot(const uint8_t speed, const uint8_t mode) // a better motor function
       analogWrite(LEFT_PWM, speed);
       analogWrite(RIGHT_PWM, speed);
       return;
-    case LEFT:
+    case LEFT: // Turns left motors backwards and right motors forward
       digitalWrite(LEFT_DIR, 1);
       digitalWrite(RIGHT_DIR, 0);
       analogWrite(LEFT_PWM, speed);
       analogWrite(RIGHT_PWM, speed);
       return;
-    case RIGHT:
+    case RIGHT: // Turns right motors backwards and left motors forward
       digitalWrite(LEFT_DIR, 0);
       digitalWrite(RIGHT_DIR, 1);
       analogWrite(LEFT_PWM, speed);
+      analogWrite(RIGHT_PWM, speed);
+      return;
+    case LEFT_SWING: // Turns right motors forward and left motors off
+      digitalWrite(LEFT_DIR, 1);
+      digitalWrite(RIGHT_DIR, 0);
+      analogWrite(LEFT_PWM, speed);
+      analogWrite(RIGHT_PWM, 0);
+      return;
+    case RIGHT_SWING: // Turns left motors forward and right motors off
+      digitalWrite(LEFT_DIR, 0);
+      digitalWrite(RIGHT_DIR, 1);
+      analogWrite(LEFT_PWM, 0);
       analogWrite(RIGHT_PWM, speed);
       return;
     default:
@@ -585,7 +658,6 @@ void status(const uint8_t color)
       digitalWrite(GREEN, 0);
       digitalWrite(BLUE, 0);
       return;
-      
     default:
       digitalWrite(RED, 1);
       digitalWrite(GREEN, 1);
@@ -593,3 +665,4 @@ void status(const uint8_t color)
       return; 
   }
 }
+

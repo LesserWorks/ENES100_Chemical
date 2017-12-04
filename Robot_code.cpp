@@ -25,38 +25,43 @@
 #include "Enes100.h"
 #include "NewPing.h"
 #include "Servo.h"
+
 // 3, 5, 6, 9, 10, 11 are PWM
 #define MARKER_ID 73
-// Pins for APC
-#define RX_PIN 12
-#define TX_PIN 13
-// Pins and colors for status LED
-#define RED 2
-#define BLUE 3
-#define GREEN 8
+// Other colors for status LED
 #define MAGENTA 4
 #define CYAN 5
 #define YELLOW 6
 #define WHITE 7
 #define OFF 0
-// Pins for drive motors
-// Motor terminal 1
-#define LEFT_DIR 4
+
+// Pin defines
+#define PH_PIN A0 // Pin for pH meter
+#define RED A1 // Pins for status LED
+#define GREEN A2
+#define BLUE A3
+#define RIGHT_SONAR A4
+#define LEFT_SONAR A5
+#define RIGHT_TOUCH 0 // Pins of two touch sensors
+#define LEFT_TOUCH 1
+#define NOT_USED 2 
+#define PUMP_PIN 3 // PWM for pump
+#define LEFT_DIR 4 // Motor terminal 1
 #define LEFT_PWM 5
-// Motor terminal 2
-#define RIGHT_PWM 6
+#define RIGHT_PWM 6 // Motor terminal 2
 #define RIGHT_DIR 7
-// Pins for sonor sensors
-#define LEFT_TRIGGER A0
-#define LEFT_ECHO A0
-#define RIGHT_TRIGGER A0
-#define RIGHT_ECHO A0
-// Pin for pH meter
-#define PH_PIN A0
+#define ALSO_NOT_USED 8 
+#define BASE_PINCH 9 // Base hose pinch
+#define ACID_PINCH 10 // Acid hose pinch
+#define ARM 11 // Arm servo
+#define RX_PIN 12 // Pins for APC
+#define TX_PIN 13
 static const int16_t defaultSpeed = 200; // A positive number passed to the motors() function 
                                          // makes the motor turn forward
 static const int16_t halfDefault = 255;  
-static const int16_t turnSpeed = 220;                                       
+static const int16_t turnSpeed = 220;    
+static const int16_t slowForward = 150;
+static const int16_t slowTurn = 170;                                   
 /*
 //Definitions for measuring pH
 unsigned long int avgValue;  //Store the average value of the sensor feedback
@@ -69,15 +74,23 @@ int buffer[10] //array to hold pH readings
 #define HALF_CIRCLE ((uint16_t)(M_PI * 1000.0)) // Pi
 #define ONE_QUARTER ((uint16_t)(M_PI * 500.0)) // Pi over two
 
+#define ARM_DOWN 95 // Servo angles for up and down positions
+#define ARM_UP 5
+#define ACID_OPEN 200 // aka Front servo
+#define ACID_CLOSED 65
+#define BASE_OPEN 110 // aka back servo
+#define BASE_CLOSED 10
 #define tol 100 // Tolerance in millimeters (or milliradians)
 #define degToRad(degree) ((degree * M_PI) / 180.0)
 #define radToDeg(radian) ((radian * 180.0) / M_PI)
 #define closeEnough(a,b) (a <= (b + tol) && a >= (b - tol)) // True if a is within (b - tol, b + tol)
+
 Enes100 rf("The Swiss Army Bot", CHEMICAL, MARKER_ID, RX_PIN, TX_PIN);
-NewPing rsense(RIGHT_TRIGGER, RIGHT_ECHO, 255);
-NewPing lsense(LEFT_TRIGGER, LEFT_ECHO, 255);
-Servo lserv;
-Servo rserv;
+NewPing rsense(RIGHT_SONAR, RIGHT_SONAR, 255);
+NewPing lsense(LEFT_SONAR, LEFT_SONAR, 255);
+Servo acidPinch;
+Servo basePinch;
+Servo arm;
 
 struct coord // Use this instead of provided coordinate class because theirs uses floats
 {
@@ -97,7 +110,7 @@ void moveTo(uint16_t destx, uint16_t desty);
 uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty, uint8_t clearance_cm);
 void turnTo(uint16_t heading);
 void motors(int16_t leftSpeed, int16_t rightSpeed);
-void getPH(void);
+float getPH(void);
 void moveToWall(void);
 void turnTest(void);
 void radioTest(void);
@@ -106,26 +119,22 @@ void baseObjectiveTest(void);
 /* New functions */
 void mot(const uint8_t speed, const uint8_t mode);
 void turn2(const uint16_t heading, const uint8_t speed);
+void moveToNoCorrection(int16_t destx, int16_t desty);
+uint8_t moveToNoCorrectionUntilObstacle(int16_t destx, int16_t desty, uint8_t clearance_cm);
+void setupPins(void);
 
-void setup() 
+void setup() // The code currently in void setup() gets us to within 10 cm of the pool using the Vision system and sonar sensors only.
 {
-  pinMode(RED, 1);
-  pinMode(GREEN, 1);
-  pinMode(BLUE, 1);
-  status(OFF);
-  
-  rserv.attach(9);
-  Serial.begin(9600);
+  setupPins();
   status(RED);
   delay(750);
   status(WHITE);
   delay(750);
   status(GREEN);
   delay(750);
- /* bool success = rf.retrieveDestination();
+  bool success = rf.retrieveDestination();
   if(!success)
   {
-    Serial.println("Failed to get destination.");
     rf.println("Failed to get destination.");
   }
   pool.x = (uint16_t)(1000.0 * rf.destination.x); // Convert from meters to millimeters
@@ -134,49 +143,130 @@ void setup()
   rf.print((int)pool.x);
   rf.print(", ");
   rf.print((int)pool.y);
-  rf.println(") mm");*/
+  rf.println(") mm");
+  turn2(ONE_QUARTER / 3, turnSpeed); // To to point right and slightly up
+  moveToNoCorrection(robot.x + 500, robot.y); // Gets us over the rocky area
+  delay(300);
+  turn2(headingToDestination(pool.x, pool.y), turnSpeed); // Turn to point towards pool
+  while(!moveToNoCorrectionUntilObstacle(pool.x, pool.y, 15)) // While we keep encountering obstacles
+  {
+    if(abs(pool.x - robot.x) > 100 || abs(pool.y - robot.y) > 100) // Are we too far away (> 100 mm) from pool?
+    {
+      if(robot.y > 1000) // Are we in upper half of arena?
+      {
+        turn2(THREE_QUARTER + 100, turnSpeed); // Turn to point down and a bit right
+        moveToNoCorrection(robot.x + 100, robot.y - 200); // Move down past obstacle
+        turn2(FULL_CIRCLE - (ONE_QUARTER / 3), turnSpeed); // Turn to point right and slightly downward
+      }
+      else // We are in lower half of arena
+      {
+        turn2(ONE_QUARTER - 100, turnSpeed);
+        moveToNoCorrection(robot.x + 100, robot.y + 200); // Move up past obstacle
+        turn2(ONE_QUARTER / 3, turnSpeed); // Turn to point right and slightly upward
+      }
+      moveToNoCorrection(robot.x + 30, robot.y); // Move a bit forward
+      turn2(headingToDestination(pool.x, pool.y), turnSpeed); // Turn to point towards pool
+    }
+    else // We are close to pool
+    {
+      break; // End while
+    }
+  }
+  // At this point we should be within 10 cm of pool
+  turn2(headingToDestination(pool.x, pool.y), turnSpeed); // Turn to point towards pool
+  mot(slowForward, FORWARD);
+  while(!digitalRead(LEFT_TOUCH) && !digitalRead(RIGHT_TOUCH)); // Wait till one of the switches gets pushed
+  mot(120, BACKWARD); // Brake motors by briefly applying reverse voltage
+  delay(100);
   mot(0, STOP);
-  //turnTest();
-  //lserv.write(0);
-  lserv.attach(10);
-  lserv.write(0);
-  delay(5000);
-  
-  
+  if(digitalRead(LEFT_TOUCH)) // The left sensor touched first
+  {
+    mot(slowForward, LEFT_SWING);
+    while(!digitalRead(RIGHT_TOUCH));
+  }
+  else // The right sensor touched first
+  {
+    mot(slowForward, RIGHT_SWING);
+    while(!digitalRead(LEFT_TOUCH));
+  }
+  mot(0, STOP); // At this point both tough sensors should be pressed
+  for(uint8_t i = ARM_UP; i < ARM_DOWN; i++)
+  {
+    arm.write(i);
+    delay(70); // Deploy arm slowly
+  }
+  rf.navigated();
+  status(WHITE);
+  analogWrite(PUMP_PIN, 128); // Begin drawing sample
+  delay(10000); // Insert delay long enough to draw sample
+  analogWrite(PUMP_PIN, 0); // Turn off pump
+  float phValue = getPH();
+  rf.baseObjective(phValue);
+  if(phValue < 7.0) // Pool is acidic, inject base
+  {
+    status(RED); // Like litmus paper
+    while(phValue < 6.0) // We must neutralize it to between 6-8
+    {
+      basePinch.write(BASE_OPEN); // Open base tube
+      delay(1000); // Inject for 1 second
+      basePinch.write(BASE_CLOSED); // Close base tube
+      delay(5000); // Let mixture settle for 5 seconds
+      phValue = getPH();
+    }
+  }
+  else // Pool is basic, inject acid
+  {
+    status(MAGENTA); // Like litmus paper
+    while(phValue > 8.0)
+    {
+      acidPinch.write(ACID_OPEN); // Open acid tube
+      delay(1000); // Inject for 1 second
+      acidPinch.write(ACID_CLOSED); // Close acid tube
+      delay(5000); // Let mixture settle for 5 seconds
+      phValue = getPH();
+    }
+  }
+  status(GREEN);
+  rf.bonusObjective(phValue); // Send neutralized phValue
+  for(uint8_t i = ARM_DOWN; i > ARM_UP; i--)
+  {
+    arm.write(i);
+    delay(70); // Raise arm back up
+  }
+  rf.endMission();
 }
 
-void loop() 
+void loop() {}
+void setupPins(void)
 {
-  //getLocation();
-  status(YELLOW);
-  Serial.println("yellow");
-  for(uint8_t i = 0; i < 181; i += 1)
-  {
-    lserv.write(i);
-    Serial.println(i);
-    delay(15);
-  }
-  
-  delay(1000);
-  status(CYAN);
-  Serial.println("cyan");
-  for(int16_t i = 181; i > 0; i--)
-  {
-    lserv.write(i);
-    Serial.println(i);
-    delay(15);
-  }
-  delay(1000);
-  /*getLocation();
-  rf.print("X: ");
-  rf.println((int)robot.x);
-  rf.print("Y: ");
-  rf.println((int)robot.y);
-  rf.print("Theta: ");
-  rf.println((int)robot.theta);
-  delay(1000);*/
+  pinMode(BASE_PINCH, 1);
+  pinMode(ACID_PINCH, 1);
+  pinMode(ARM, 1);
+  basePinch.attach(BASE_PINCH);
+  acidPinch.attach(ACID_PINCH);
+  arm.attach(ARM);
+  basePinch.write(BASE_CLOSED); // Write default positions here
+  acidPinch.write(ACID_CLOSED);
+  arm.write(ARM_UP);
+  pinMode(PH_PIN, 0);
+  pinMode(RED, 1);
+  pinMode(BLUE, 1);
+  pinMode(GREEN, 1);
+  pinMode(RIGHT_SONAR, 1);
+  pinMode(LEFT_SONAR, 1);
+  pinMode(RIGHT_TOUCH, 0);
+  pinMode(LEFT_TOUCH, 0);
+  pinMode(PUMP_PIN, 1);
+  pinMode(LEFT_DIR, 1);
+  pinMode(LEFT_PWM, 1);
+  pinMode(RIGHT_PWM, 1);
+  pinMode(RIGHT_DIR, 1);
+  pinMode(RX_PIN, 0);
+  pinMode(TX_PIN, 1);
+  status(OFF);
+  mot(0, STOP);
+  return;
 }
-
 uint16_t headingToDestination(uint16_t destx, uint16_t desty) // This works, has been tested
 {
   int16_t dy = (int16_t)desty - (int16_t)robot.y;
@@ -203,7 +293,6 @@ void getLocation(void) // This function updates the robots's coordinates
   bool success = rf.updateLocation();
   if(!success)
   {
-    Serial.println("Failed to update location.");
     rf.println("Failed to update location.");
     status(RED);
   }
@@ -225,32 +314,65 @@ void getLocation(void) // This function updates the robots's coordinates
   }
   rf.print("Theta: ");
   rf.println((int)robot.theta);
-  Serial.print("Theta: ");
-  Serial.println(robot.theta);
   // The following line references theta from east instead of north, if necessary
   //robot.theta = robot.theta > THREE_QUARTER ? robot.theta - THREE_QUARTER : robot.theta + ONE_QUARTER;
   return;
 }
 void moveToNoCorrection(int16_t destx, int16_t desty)
 {
-  if(abs((int16_t)robot.x - destx) < abs((int16_t)robot.y - desty)) // Closer to x, so move y
+  if(abs((int16_t)robot.x - destx) < abs((int16_t)robot.y - desty)) // Closer to x, so move while checking y
   {
+    mot(defaultSpeed, FORWARD);
     while(!closeEnough((int16_t)robot.y, desty))
+    {
+      getLocation();
+    }
+  }
+  else // Closer to y, so move while checking x
   {
-    getLocation();
     mot(defaultSpeed, FORWARD);
-  }
-  }
-  else // Closer to y, so move x
-  {
-  while(!closeEnough((int16_t)robot.x, destx))
-  {
-    getLocation();
-    mot(defaultSpeed, FORWARD);
-  }
+    while(!closeEnough((int16_t)robot.x, destx))
+    {
+      getLocation();
+    }
   }
   mot(0, STOP);
   return;
+}
+uint8_t moveToNoCorrectionUntilObstacle(int16_t destx, int16_t desty, uint8_t clearance_cm)
+{
+  if(abs((int16_t)robot.x - destx) < abs((int16_t)robot.y - desty)) // Closer to x, so move while checking y
+  {
+    mot(defaultSpeed, FORWARD);
+    while(!closeEnough((int16_t)robot.y, desty))
+    {
+      getLocation();
+      uint8_t rdist = rsense.ping_cm();
+      uint8_t ldist = lsense.ping_cm();
+      if((rdist || ldist) && (rdist < clearance_cm || ldist < clearance_cm)) // Are either nonzero and if so, within allowable clearance?
+      {
+        mot(0, STOP);
+        return 0; // We did not reach destination
+      }
+    }
+  }
+  else // Closer to y, so move while checking x
+  {
+    mot(defaultSpeed, FORWARD);
+    while(!closeEnough((int16_t)robot.x, destx))
+    {
+      getLocation();
+      uint8_t rdist = rsense.ping_cm();
+      uint8_t ldist = lsense.ping_cm();
+      if((rdist || ldist) && (rdist < clearance_cm || ldist < clearance_cm)) // Are either nonzero and if so, within allowable clearance?
+      {
+        mot(0, STOP);
+        return 0; // We did not reach destination
+      }
+    }
+  }
+  mot(0, STOP);
+  return 1; // We did reach destination
 }
 void moveTo(uint16_t destx, uint16_t desty) // Moves to destination location without accounting for obstacles
 {
@@ -344,24 +466,7 @@ uint8_t moveToUntilObstacle(uint16_t destx, uint16_t desty, uint8_t clearance_cm
   mot(0, STOP); // Stop moving
   return 1; // We did reach destination
 }
-void turnTo(uint16_t heading) // Use turn2 instead
-{
-  getLocation();
-  if(robot.theta < heading) // Must turn counterclockwise (to left)
-  { // To turn left, right motors go forward and left motors go backward
-    motors(defaultSpeed*-1, defaultSpeed);
-  }
-  else // Must turn clockwise (to right)
-  { // To turn right, left motors for forward and right motors go backward
-    motors(halfDefault, halfDefault*(-1));
-  }
-  while(!closeEnough(robot.theta, heading))
-  {
-    getLocation(); //updates angle so that we'll know to stop turning
-  }
-  motors(0,0);
-  return;
-}
+
 void turn2(const uint16_t heading, const uint8_t speed)
 {
   getLocation();
@@ -419,147 +524,22 @@ void turn2(const uint16_t heading, const uint8_t speed)
   mot(0,STOP);
   return;
 }
-void motors(int16_t leftSpeed, int16_t rightSpeed) // Use mot() instead
-{ // A positive number causes that motor to turn forward
-  if(leftSpeed == 0)
-  {
-    digitalWrite(LEFT_DIR, LOW);
-    digitalWrite(LEFT_PWM, 0);
-  }
-  if(rightSpeed == 0)
-  {
-    digitalWrite(RIGHT_DIR, LOW);
-    digitalWrite(RIGHT_PWM, 0);
-  }
-  if(leftSpeed < 0)
-  {
-    digitalWrite(LEFT_DIR, LOW);
-    int8_t val = (leftSpeed * (-1));
-    //Serial.println(val);
-    //analogWrite(LEFT_PWM, (uint8_t)(leftSpeed * (-1)));
-    analogWrite(LEFT_PWM, val);
-  }
-  else
-  {
-    digitalWrite(LEFT_DIR, HIGH);
-    analogWrite(LEFT_PWM, leftSpeed);
-  }
-  if(rightSpeed < 0)
-    {
-    digitalWrite(RIGHT_DIR, LOW);
-    analogWrite(RIGHT_PWM, (rightSpeed *(-1)));
-    }
-  else
-  {
-    digitalWrite(RIGHT_DIR, HIGH);
-    analogWrite(RIGHT_PWM, rightSpeed);
-  }   
-}
 
-void getPH(void)
+float getPH(void)
 {
   uint16_t total = 0;
-  for(uint8_t i = 0; i < 10; i++)       //Get 10 sample value from the sensor for smooth the value
+  for(uint8_t i = 0; i < 10; i++)
   { 
-    /*buffer[i]=analogRead(PH_PIN);
-    total += buffer[i];*/
     total += analogRead(PH_PIN);
     delay(10);
   }
   float phValue = ((float)total) / 10.0;
-  phValue = map(phValue, 0, 1023, 0, 14);
-  rf.baseObjective(phValue);
+  phValue = map(phValue, 0.0, 1023.0, 0.0, 14.0);
+  return phValue - 0.3;
 }
 // Below are MS5 functions
-void moveToWall(void) // Forward locomotion test
-{
-  getLocation();
-  moveTo(3900, robot.y);
-  rf.navigated();
-  rf.println("Reached wall");
-  rf.endMission();
-}
-void turnTest(void) // Turning test
-{
-  rf.println("Beginning turn test");
-  getLocation(); // Robot should start facing to right
-  moveToNoCorrection(robot.x + 100, robot.y); // Move one meter to right
-  turn2(THREE_QUARTER, turnSpeed); // Turn to point down
-  moveToNoCorrection(robot.x, robot.y - 100); // Move 25 cm downward
-  turn2(HALF_CIRCLE, turnSpeed); // Turn to point to left
-  moveToNoCorrection(robot.x - 100, robot.y); // Move 25 cm to left
-  turn2(THREE_QUARTER, turnSpeed); // Turn to point down
-  /*while(robot.theta > ONE_QUARTER)
-  {
-    motors(defaultSpeed*-1, defaultSpeed);
-    getLocation();
-    rf.print("X: ");
-  rf.println((int)robot.x);
-  rf.print("Y: ");
-  rf.println((int)robot.y);
-  rf.print("Theta: ");
-  rf.println((int)robot.theta);
-  }
-  motors(0, 0);
-  delay(500);
-  while(robot.theta < HALF_CIRCLE)
-  {
-    motors(defaultSpeed, defaultSpeed*-1);
-    getLocation();
-    rf.print("X: ");
-  rf.println((int)robot.x);
-  rf.print("Y: ");
-  rf.println((int)robot.y);
-  rf.print("Theta: ");
-  rf.println((int)robot.theta);
-  }
-  motors(0, 0);
-  delay(500);
-  while(robot.theta > ONE_QUARTER)
-  {
-    motors(defaultSpeed*-1, defaultSpeed);
-    getLocation();
-    rf.print("X: ");
-  rf.println((int)robot.x);
-  rf.print("Y: ");
-  rf.println((int)robot.y);
-  rf.print("Theta: ");
-  rf.println((int)robot.theta);
-  }
-  motors(0, 0);
-  //rf.endMission();*/
-  return;
-}
-void radioTest(void) // RF communications test
-{
-  Serial.begin(9600);
-  getLocation();
-  Serial.print("X: ");
-  Serial.println(robot.x);
-  Serial.print("Y: ");
-  Serial.println(robot.y);
-  Serial.print("Theta: ");
-  Serial.println(robot.theta);
-  rf.print("X: ");
-  rf.println((int)robot.x);
-  rf.print("Y: ");
-  rf.println((int)robot.y);
-  rf.print("Theta: ");
-  rf.println((int)robot.theta);
-  moveTo(robot.x + 700, robot.y);
-  Serial.print("X: ");
-  Serial.println(robot.x);
-  Serial.print("Y: ");
-  Serial.println(robot.y);
-  Serial.print("Theta: ");
-  Serial.println(robot.theta);
-  rf.print("X: ");
-  rf.println((int)robot.x);
-  rf.print("Y: ");
-  rf.println((int)robot.y);
-  rf.print("Theta: ");
-  rf.println((int)robot.theta);
-}
+
+
 void baseObjectiveTest(void) // Navigate to pool and measure pH
 {
   moveTo(pool.x - 100, pool.y - 100); // Drives till we are about 10 cm away from pool
@@ -665,4 +645,3 @@ void status(const uint8_t color)
       return; 
   }
 }
-
